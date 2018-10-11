@@ -1,7 +1,10 @@
 {
   "name": "wikimedia/avro",
+  "type": "library",
   "description": "A library for using Apache Avro with PHP.",
-  "keywords": ["serialization"],
+  "keywords": [
+    "serialization"
+  ],
   "homepage": "https://avro.apache.org/",
   "license": "Apache-2.0",
   "authors": [
@@ -31,23 +34,29 @@
     }
   ],
   "require": {
-    "php": ">=5.5.9"
+    "php": ">=5.6",
+    "ext-json": "*"
   },
   "require-dev": {
-    "jakub-onderka/php-parallel-lint": "0.9.2",
-    "jakub-onderka/php-console-highlighter": "0.3.2",
-    "phpunit/phpunit": "4.8.36"
+    "jakub-onderka/php-parallel-lint": "0.9",
+    "jakub-onderka/php-console-highlighter": "^0.3",
+    "phpunit/phpunit": "^5.0",
+    "phpmd/phpmd": "@stable",
+    "squizlabs/php_codesniffer": "^3.3",
+    "ext-gmp": "*"
   },
   "suggest": {
     "ext-gmp": "Large integer support for 32-bit platforms."
   },
   "autoload": {
-    "classmap": ["lib/"]
+    "psr-4": {
+      "Avro\\": "src/Avro"
+    }
   },
   "scripts": {
     "test": [
       "parallel-lint . --exclude vendor",
-      "phpunit test/AllTests.php"
+      "phpunit"
     ]
   }
 }
