@@ -1,7 +1,7 @@
-What the Avro PHP library is
+What the Avro\Avro PHP library is
 ============================
 
-A library for using [Avro](http://avro.apache.org/) with PHP.
+A library for using [Avro\Avro](http://avro.apache.org/) with PHP.
 
 Requirements
 ------------

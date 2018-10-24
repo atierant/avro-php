@@ -1,0 +1,27 @@
+language: php
+
+sudo: false
+dist: trusty
+
+php:
+- 5.6
+- 7.0
+- 7.1
+- 7.2
+- nightly
+
+cache:
+    directories:
+    - $HOME/.composer/cache
+
+matrix:
+    include:
+    - php: 7.1
+      env: deps=low
+    fast_finish: true
+
+before_script:
+- if [ "$deps" == "low" ]; then composer update --prefer-dist --prefer-lowest --prefer-stable; fi
+- if [ "$deps" != "low" ]; then composer install --prefer-dist; fi
+
+script: composer test
