@@ -38,12 +38,13 @@
     "ext-json": "*"
   },
   "require-dev": {
-    "jakub-onderka/php-parallel-lint": "0.9",
+    "ext-xml": "*",
+    "jakub-onderka/php-parallel-lint": "^1.0",
     "jakub-onderka/php-console-highlighter": "^0.3",
-    "phpunit/phpunit": "^5.0",
+    "mediawiki/minus-x": "^0.3",
+    "phpunit/phpunit": "^6.0",
     "phpmd/phpmd": "@stable",
-    "squizlabs/php_codesniffer": "^3.3",
-    "ext-gmp": "*"
+    "squizlabs/php_codesniffer": "^3.3"
   },
   "suggest": {
     "ext-gmp": "Large integer support for 32-bit platforms."
@@ -57,6 +58,9 @@
     "test": [
       "parallel-lint . --exclude vendor",
       "phpunit"
+    ],
+    "fix": [
+      "minus-x fix ."
     ]
   }
 }

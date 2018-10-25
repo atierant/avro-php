@@ -21,6 +21,7 @@ namespace Avro\Datum;
 
 use Avro\Exception\AvroException;
 use Avro\Exception\Datum\AvroIOSchemaMatchException;
+use Avro\Exception\IO\AvroSchemaResolutionException;
 use Avro\Schema\AvroArraySchemaInterface;
 use Avro\Schema\AvroEnumSchemaInterface;
 use Avro\Schema\AvroFixedSchemaInterface;
@@ -57,7 +58,7 @@ class AvroIODatumReader implements IODatumReaderInterface
 
     /**
      * @param AvroSchemaInterface|string $writersSchema
-     * @param IOBinaryDecoderInterface   $decoder
+     * @param IOBinaryDecoderInterface $decoder
      *
      * @return mixed
      * @throws AvroException
@@ -82,21 +83,142 @@ class AvroIODatumReader implements IODatumReaderInterface
             case AvroSchema::BYTES_TYPE:
                 return $decoder->skipBytes();
             case AvroSchema::ARRAY_SCHEMA:
-                return $decoder->skip_array($writersSchema, $decoder);
+                return $this->skipArray($writersSchema, $decoder);
             case AvroSchema::MAP_SCHEMA:
-                return $decoder->skip_map($writersSchema, $decoder);
+                return $this->skipMap($writersSchema, $decoder);
             case AvroSchema::UNION_SCHEMA:
-                return $decoder->skip_union($writersSchema, $decoder);
+                return $this->skipUnion($writersSchema, $decoder);
             case AvroSchema::ENUM_SCHEMA:
-                return $decoder->skip_enum($writersSchema, $decoder);
+                return $this->skipEnum($writersSchema, $decoder);
             case AvroSchema::FIXED_SCHEMA:
-                return $decoder->skip_fixed($writersSchema, $decoder);
+                return $this->skipFixed($writersSchema, $decoder);
             case AvroSchema::RECORD_SCHEMA:
             case AvroSchema::ERROR_SCHEMA:
             case AvroSchema::REQUEST_SCHEMA:
-                return $decoder->skip_record($writersSchema, $decoder);
+                return $this->skipRecord($writersSchema, $decoder);
             default:
                 throw new AvroException(sprintf('Uknown schema type: %s', $writersSchema->getType()));
+        }
+    }
+
+    /**
+     * @param AvroArraySchemaInterface|AvroSchemaInterface $writersSchema
+     * @param IOBinaryDecoderInterface $decoder
+     * @throws AvroException
+     */
+    private function skipArray(AvroArraySchemaInterface $writersSchema, IOBinaryDecoderInterface $decoder)
+    {
+        $blockCount = $decoder->readLong();
+        while (0 !== $blockCount) {
+            if (0 > $blockCount) {
+                $decoder->skip($decoder->readLong());
+            } else {
+                foreach (range(0, $blockCount) as $i) {
+                    $this->skipData($writersSchema->getItems(), $decoder);
+                }
+
+            }
+
+            $blockCount = $decoder->readLong();
+        }
+    }
+
+    /**
+     * @param AvroRecordSchemaInterface|AvroSchemaInterface $writersSchema
+     * @param IOBinaryDecoderInterface $decoder
+     * @throws AvroException
+     */
+    private function skipRecord(AvroRecordSchemaInterface $writersSchema, IOBinaryDecoderInterface $decoder)
+    {
+        foreach ($writersSchema->getFields() as $field) {
+            $this->skipData($field->getType(), $decoder);
+        }
+
+        return;
+    }
+
+    /**
+     * @param AvroMapSchemaInterface|AvroSchemaInterface $writersSchema
+     * @param IOBinaryDecoderInterface $decoder
+     * @throws AvroException
+     */
+    private function skipMap(AvroMapSchemaInterface $writersSchema, IOBinaryDecoderInterface $decoder)
+    {
+        $blockCount = $decoder->readLong();
+        while (0 !== $blockCount) {
+            if (0 > $blockCount) {
+                $decoder->skip($decoder->readLong());
+            } else {
+                foreach (range(0, $blockCount) as $i) {
+                    $decoder->skipBytes();
+                    $this->skipData($writersSchema->getValues(), $decoder);
+                }
+
+            }
+
+            $blockCount = $decoder->readLong();
+        }
+    }
+
+    /**
+     * @param AvroUnionSchemaInterface|AvroSchemaInterface $writersSchema
+     * @param IOBinaryDecoderInterface $decoder
+     * @return mixed
+     * @throws AvroException
+     */
+    private function skipUnion(AvroUnionSchemaInterface $writersSchema, IOBinaryDecoderInterface $decoder)
+    {
+        $schemaIndex = $decoder->readLong();
+        if ($schemaIndex >= count($writersSchema->getSchemas())) {
+            $failMsg = sprintf("Can't access branch index %d for union with %d branches",
+                $schemaIndex,
+                count($writersSchema->getSchemas())
+            );
+            throw new AvroSchemaResolutionException($failMsg, $writersSchema);
+        }
+        return $this->skipData($writersSchema->getSchemaByIndex($schemaIndex), $decoder);
+    }
+
+    /**
+     * @param AvroEnumSchemaInterface|AvroSchemaInterface $writersSchema
+     * @param IOBinaryDecoderInterface $decoder
+     * @return mixed
+     */
+    private function skipEnum(AvroEnumSchemaInterface $writersSchema, IOBinaryDecoderInterface $decoder)
+    {
+        return $decoder->skipInt();
+    }
+
+    /**
+     * @param AvroFixedSchemaInterface|AvroSchemaInterface $writersSchema
+     * @param IOBinaryDecoderInterface $decoder
+     * @return bool
+     */
+    private function skipFixed(AvroFixedSchemaInterface $writersSchema, IOBinaryDecoderInterface $decoder)
+    {
+        return $decoder->skip($writersSchema->getSize());
+    }
+
+    /**
+     * @param IOBinaryDecoderInterface $decoder
+     * @param AvroArraySchemaInterface $writersSchema
+     * @throws AvroException
+     */
+    private function skipBlocks(IOBinaryDecoderInterface $decoder, AvroArraySchemaInterface $writersSchema)
+    {
+        $blockCount = $decoder->readLong();
+        while (0 !== $blockCount) {
+            if (0 > $blockCount) {
+                $decoder->skip($decoder->readLong());
+            } else {
+                // .rb => block_count.times &blk
+                foreach (range(0, $blockCount) as $i) {
+                    $this->skipData($writersSchema->getItems(), $decoder);
+                }
+
+            }
+
+            $blockCount = $decoder->readLong();
         }
     }
 
@@ -105,7 +227,7 @@ class AvroIODatumReader implements IODatumReaderInterface
      *
      * @param AvroSchemaInterface $schemaOne
      * @param AvroSchemaInterface $schemaTwo
-     * @param string[]            $attributeNames array of string attribute names to compare
+     * @param string[] $attributeNames array of string attribute names to compare
      *
      * @return boolean true if the attributes match and false otherwise.
      */
@@ -226,7 +348,7 @@ class AvroIODatumReader implements IODatumReaderInterface
     /**
      * @param AvroSchemaInterface|AvroUnionSchemaInterface|string $writersSchema
      * @param AvroSchemaInterface|AvroUnionSchemaInterface|string $readersSchema
-     * @param IOBinaryDecoderInterface                            $decoder
+     * @param IOBinaryDecoderInterface $decoder
      *
      * @return mixed
      * @throws AvroException
@@ -289,9 +411,18 @@ class AvroIODatumReader implements IODatumReaderInterface
     }
 
     /**
+     * Arrays are encoded as a series of blocks.
+     *
+     * Each block consists of a long count value, followed by that many array items.
+     * A block with count zero indicates the end of the array. Each item is encoded per the array's item schema.
+     *
+     * If a block's count is negative, then the count is followed immediately by a long block size,
+     * indicating the number of bytes in the block.
+     * The actual count in this case is the absolute value of the count written.
+     *
      * @param AvroArraySchemaInterface|AvroSchemaInterface $writersSchema
      * @param AvroArraySchemaInterface|AvroSchemaInterface $readersSchema
-     * @param IOBinaryDecoderInterface                     $decoder
+     * @param IOBinaryDecoderInterface $decoder
      *
      * @return array
      * @throws AvroException
@@ -299,26 +430,36 @@ class AvroIODatumReader implements IODatumReaderInterface
      */
     public function readArray($writersSchema, $readersSchema, $decoder)
     {
-        $items       = [];
-        $block_count = $decoder->readLong();
-        while (0 != $block_count) {
-            if ($block_count < 0) {
-                $block_count = -$block_count;
+        $items = [];
+        $blockCount = $decoder->readLong();
+        while (0 != $blockCount) {
+            if ($blockCount < 0) {
+                $blockCount = -$blockCount;
                 $decoder->readLong(); // Read (and ignore) block size
             }
-            for ($i = 0; $i < $block_count; $i++) {
+            for ($i = 0; $i < $blockCount; $i++) {
                 $items [] = $this->readData($writersSchema->getItems(), $readersSchema->getItems(), $decoder);
             }
-            $block_count = $decoder->readLong();
+            $blockCount = $decoder->readLong();
         }
 
         return $items;
     }
 
     /**
+     * Maps are encoded as a series of blocks.
+     *
+     * Each block consists of a long count value, followed by that many key/value pairs.
+     * A block with count zero indicates the end of the map.
+     * Each item is encoded per the map's value schema.
+     *
+     * If a block's count is negative, then the count is followed immediately by a long block size,
+     * indicating the number of bytes in the block.
+     * The actual count in this case is the absolute value of the count written.
+     *
      * @param AvroMapSchemaInterface|AvroSchemaInterface $writersSchema
      * @param AvroMapSchemaInterface|AvroSchemaInterface $readersSchema
-     * @param IOBinaryDecoderInterface                   $decoder
+     * @param IOBinaryDecoderInterface $decoder
      *
      * @return array
      * @throws AvroException
@@ -326,28 +467,32 @@ class AvroIODatumReader implements IODatumReaderInterface
      */
     public function readMap($writersSchema, $readersSchema, $decoder)
     {
-        $items      = [];
-        $pair_count = $decoder->readLong();
-        while (0 != $pair_count) {
-            if ($pair_count < 0) {
-                $pair_count = -$pair_count;
+        $items = [];
+        $pairCount = $decoder->readLong();
+        while (0 != $pairCount) {
+            if ($pairCount < 0) {
+                $pairCount = -$pairCount;
                 // Note: Ingoring what we read here
                 $decoder->readLong();
             }
 
-            for ($i = 0; $i < $pair_count; $i++) {
-                $key         = $decoder->readString();
+            for ($i = 0; $i < $pairCount; $i++) {
+                $key = $decoder->readString();
                 $items[$key] = $this->readData($writersSchema->getValues(), $readersSchema->getValues(), $decoder);
             }
-            $pair_count = $decoder->readLong();
+            $pairCount = $decoder->readLong();
         }
 
         return $items;
     }
 
     /**
-     * @param AvroUnionSchemaInterface $writersSchema
-     * @param AvroUnionSchemaInterface $readersSchema
+     * A union is encoded by first writing a long value indicating
+     * the zero-based position within the union of the schema of its value.
+     * The value is then encoded per the indicated schema within the union.
+     *
+     * @param AvroUnionSchemaInterface|AvroSchemaInterface $writersSchema
+     * @param AvroUnionSchemaInterface|AvroSchemaInterface $readersSchema
      * @param IOBinaryDecoderInterface $decoder
      *
      * @return mixed
@@ -356,23 +501,25 @@ class AvroIODatumReader implements IODatumReaderInterface
      */
     public function readUnion($writersSchema, $readersSchema, $decoder)
     {
-        $schema_index          = $decoder->readLong();
-        $selectedWritersSchema = $writersSchema->getSchemaByIndex($schema_index);
+        $schemaIndex = $decoder->readLong();
+        $selectedWritersSchema = $writersSchema->getSchemaByIndex($schemaIndex);
 
         return $this->readData($selectedWritersSchema, $readersSchema, $decoder);
     }
 
     /**
+     * An enum is encoded by a int, representing the zero-based position of the symbol in the schema.
+     *
      * @param AvroEnumSchemaInterface|AvroSchemaInterface $writersSchema
      * @param AvroEnumSchemaInterface|AvroSchemaInterface $readersSchema
-     * @param IOBinaryDecoderInterface                    $decoder
+     * @param IOBinaryDecoderInterface $decoder
      *
      * @return string
      */
     public function readEnum($writersSchema, $readersSchema, $decoder)
     {
-        $symbol_index = $decoder->readInt();
-        $symbol       = $writersSchema->getSymbolByIndex($symbol_index);
+        $symbolIndex = $decoder->readInt();
+        $symbol = $writersSchema->getSymbolByIndex($symbolIndex);
         if (!$readersSchema->hasSymbol($symbol)) {
             null;  // FIXME: unset wrt schema resolution
         }
@@ -381,9 +528,11 @@ class AvroIODatumReader implements IODatumReaderInterface
     }
 
     /**
+     * Fixed instances are encoded using the number of bytes declared in the schema.
+     *
      * @param AvroFixedSchemaInterface|AvroSchemaInterface $writersSchema
      * @param AvroFixedSchemaInterface|AvroSchemaInterface $readersSchema
-     * @param IOBinaryDecoderInterface                $decoder
+     * @param IOBinaryDecoderInterface $decoder
      *
      * @return string
      */
@@ -393,9 +542,27 @@ class AvroIODatumReader implements IODatumReaderInterface
     }
 
     /**
+     * A record is encoded by encoding the values of its fields
+     * in the order that they are declared. In other words, a record
+     * is encoded as just the concatenation of the encodings of its fields.
+     * Field values are encoded per their schema.
+     *
+     * Schema Resolution:
+     * - the ordering of fields may be different: fields are matched by name.
+     * schemas for fields with the same name in both records are resolved
+     * recursively.
+     * - if the writer's record contains a field with a name not present in the
+     * reader's record, the writer's value for that field is ignored.
+     * - if the reader's record schema has a field that contains a default value,
+     * and writer's schema does not have a field with the same name, then the
+     * reader should use the default value from its field.
+     * - if the reader's record schema has a field with no default value, and
+     * writer's schema does not have a field with the same name, then the
+     * field's value is unset.
+     *
      * @param AvroRecordSchemaInterface|AvroSchemaInterface $writersSchema
      * @param AvroRecordSchemaInterface|AvroSchemaInterface $readersSchema
-     * @param IOBinaryDecoderInterface                      $decoder
+     * @param IOBinaryDecoderInterface $decoder
      *
      * @return array
      * @throws AvroException
@@ -404,7 +571,7 @@ class AvroIODatumReader implements IODatumReaderInterface
     public function readRecord($writersSchema, $readersSchema, $decoder)
     {
         $readersFields = $readersSchema->getFieldsHash();
-        $record        = [];
+        $record = [];
         foreach ($writersSchema->getFields() as $writersField) {
             $type = $writersField->getType();
             if (isset($readersFields[$writersField->getName()])) {
@@ -454,17 +621,17 @@ class AvroIODatumReader implements IODatumReaderInterface
                 return $defaultValue;
             case AvroSchema::INT_TYPE:
             case AvroSchema::LONG_TYPE:
-                return (int) $defaultValue;
+                return (int)$defaultValue;
             case AvroSchema::FLOAT_TYPE:
             case AvroSchema::DOUBLE_TYPE:
-                return (float) $defaultValue;
+                return (float)$defaultValue;
             case AvroSchema::STRING_TYPE:
             case AvroSchema::BYTES_TYPE:
                 return $defaultValue;
             case AvroSchema::ARRAY_SCHEMA:
                 $array = [];
                 foreach ($defaultValue as $json_val) {
-                    $val      = $this->readDefaultValue($fieldSchema->getItems(), $json_val);
+                    $val = $this->readDefaultValue($fieldSchema->getItems(), $json_val);
                     $array [] = $val;
                 }
 

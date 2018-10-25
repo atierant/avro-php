@@ -396,6 +396,12 @@ class SchemaTest extends TestCase
             true,
             '{"type":"record","name":"foo","fields":[{"name":"bar","type":["null","string"],"default":null}]}'
         );
+        // Don't lose the "doc" attributes of record fields.
+        $recordExamples []= new SchemaExample(
+            '{"type":"record","name":"foo","fields":[{"name":"bar","type":["null","string"],"doc":"Bar name."}]}',
+            true,
+            '{"type":"record","name":"foo","fields":[{"name":"bar","type":["null","string"],"doc":"Bar name."}]}');
+
 
         self::$examples = array_merge(
             $primitiveExamples,
@@ -432,6 +438,41 @@ class SchemaTest extends TestCase
     /**
      * @return array
      */
+    function parseBadJsonProvider()
+    {
+        return [
+            // Valid
+            ['{"type": "array", "items": "long"}', null],
+            // Trailing comma
+            ['{"type": "array", "items": "long", }', "JSON decode error 4: Syntax error"],
+            // Wrong quotes
+            ["{'type': 'array', 'items': 'long'}", "JSON decode error 4: Syntax error"],
+            // Binary data
+            ["\x11\x07", "JSON decode error 3: Control character error, possibly incorrectly encoded"],
+        ];
+    }
+
+    /**
+     * @dataProvider parseBadJsonProvider
+     */
+    function testParseBadJson($json, $failure)
+    {
+        if (defined('HHVM_VERSION')) {
+            // Under HHVM, json_decode is not as strict and feature complete as standard PHP.
+            self::markTestSkipped();
+        }
+        try {
+            $schema = AvroSchema::parse($json);
+            self::assertEquals($failure, null);
+        } catch (AvroSchemaParseException $e) {
+            self::assertEquals($failure, $e->getMessage());
+        }
+    }
+
+
+    /**
+     * @return array
+     */
     public function schemaExamplesProvider()
     {
         self::makeExamples();
@@ -453,9 +494,10 @@ class SchemaTest extends TestCase
         $schemaString = $example->schemaString;
         try {
             $normalizedSchemaString = $example->normalizedSchemaString;
-            $schema                 = AvroSchema::parse($schemaString);
+            $schema = AvroSchema::parse($schemaString);
 
             self::assertTrue($example->isValid, sprintf("schemaString: %s\n", $schemaString));
+            // strval() roughly does to_avro() + json_encode()
             self::assertEquals($normalizedSchemaString, strval($schema));
         } catch (AvroSchemaParseException $e) {
             self::assertFalse($example->isValid, sprintf("schemaString: %s\n%s", $schemaString, $e->getMessage()));
@@ -464,7 +506,7 @@ class SchemaTest extends TestCase
 
     public function testRecordDoc()
     {
-        $json   = '{"type": "record", "name": "foo", "doc": "Foo doc.",
+        $json = '{"type": "record", "name": "foo", "doc": "Foo doc.",
                         "fields": [{"name": "bar", "type": "int", "doc": "Bar doc."}]}';
         $schema = AvroSchema::parse($json);
         self::assertEquals($schema->getDoc(), "Foo doc.");
@@ -476,7 +518,7 @@ class SchemaTest extends TestCase
 
     public function testEnumDoc()
     {
-        $json   = '{"type": "enum", "name": "blood_types", "doc": "AB is freaky.", "symbols": ["A", "AB", "B", "O"]}';
+        $json = '{"type": "enum", "name": "blood_types", "doc": "AB is freaky.", "symbols": ["A", "AB", "B", "O"]}';
         $schema = AvroSchema::parse($json);
         self::assertEquals($schema->getDoc(), "AB is freaky.");
     }

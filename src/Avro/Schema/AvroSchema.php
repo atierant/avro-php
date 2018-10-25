@@ -262,7 +262,12 @@ class AvroSchema implements AvroSchemaInterface
     {
         $schemata = new AvroNamedSchemata();
 
-        return self::realParse(json_decode($json, true), null, $schemata);
+        $avro = json_decode($json, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            throw new AvroSchemaParseException("JSON decode error " . json_last_error() . ": " . json_last_error_msg());
+        }
+
+        return self::realParse($avro, null, $schemata);
     }
 
     /**

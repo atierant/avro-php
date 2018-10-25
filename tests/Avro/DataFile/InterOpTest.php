@@ -31,6 +31,7 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * Class InterOpTest
+ * @group interop
  */
 class InterOpTest extends TestCase
 {

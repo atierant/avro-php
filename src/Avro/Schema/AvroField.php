@@ -128,6 +128,10 @@ class AvroField extends AvroSchema implements AvroFieldInterface
             $avro[AvroField::ORDER_ATTR] = $this->order;
         }
 
+        if ($this->doc) {
+            $avro[AvroSchema::DOC_ATTR] = $this->doc;
+        }
+
         return $avro;
     }
 
