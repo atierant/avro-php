@@ -29,7 +29,7 @@ require_once __DIR__ . '/SchemaExample.php';
  */
 class SchemaTest extends TestCase
 {
-    public static $examples = [];
+    public static $examples      = [];
     public static $validExamples = [];
 
     /**
@@ -179,7 +179,7 @@ class SchemaTest extends TestCase
         ];
 
 
-        $recordExamples = [];
+        $recordExamples    = [];
         $recordExamples [] = new SchemaExample('
     {"type": "record",
      "name": "Test",
@@ -426,7 +426,7 @@ class SchemaTest extends TestCase
         self::assertEquals(json_decode('null', true), null);
         self::assertEquals(json_decode('32', true), 32);
         self::assertEquals(json_decode('"32"', true), '32');
-        self::assertEquals((array)json_decode('{"foo": 27}'), ["foo" => 27]);
+        self::assertEquals((array) json_decode('{"foo": 27}'), ["foo" => 27]);
         self::assertTrue(is_array(json_decode('{"foo": 27}', true)));
         self::assertEquals(json_decode('{"foo": 27}', true), ["foo" => 27]);
         self::assertEquals(json_decode('["bar", "baz", "blurfl"]', true), ["bar", "baz", "blurfl"]);

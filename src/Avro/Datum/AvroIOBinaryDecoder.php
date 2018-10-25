@@ -285,43 +285,6 @@ class AvroIOBinaryDecoder implements IOBinaryDecoderInterface
         return $this->skipBytes();
     }
 
-    public function skipArray()
-    {
-// todo
-    }
-
- /*
-  *
-  * array map union enum fixed record
-def skip_fixed(writers_schema, decoder)
-decoder.skip(writers_schema.size)
-end
-
-def skip_enum(writers_schema, decoder)
-decoder.skip_int
-end
-
-def skip_union(writers_schema, decoder)
-index = decoder.read_long
-skip_data(writers_schema.schemas[index], decoder)
-end
-
-def skip_array(writers_schema, decoder)
-skip_blocks(decoder) { skip_data(writers_schema.items, decoder) }
-end
-
-      def skip_map(writers_schema, decoder)
-        skip_blocks(decoder) {
-        decoder.skip_string
-          skip_data(writers_schema.values, decoder)
-        }
-      end
-
-      def skip_record(writers_schema, decoder)
-        writers_schema.fields.each{|f| skip_data(f.type, decoder) }
-      end
-*/
-
     /**
      * @param int $len Count of bytes to skip
      *
